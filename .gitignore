@@ -1,0 +1,5 @@
+helper/config.json
+helper/helper.log
+helper/saved_songs.txt
+helper/__pycache__/
+*.pyc

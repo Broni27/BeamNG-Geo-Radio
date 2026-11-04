@@ -1,0 +1,9 @@
+{
+"geoRadio_toggle": {"cat": "gameplay", "order": 80, "ctx": "tlua", "onDown": "if geoRadio then geoRadio.toggleWindow() end", "title": "Geo Radio: show / hide window", "desc": "Shows or hides the Geo Radio station list (Ctrl+Alt+R)."},
+"geoRadio_next": {"cat": "gameplay", "order": 81, "ctx": "tlua", "onDown": "if geoRadio then geoRadio.next() end", "title": "Geo Radio: tune up", "desc": "Tunes up to the next station by frequency (Ctrl+Alt+N)."},
+"geoRadio_prev": {"cat": "gameplay", "order": 82, "ctx": "tlua", "onDown": "if geoRadio then geoRadio.prev() end", "title": "Geo Radio: tune down", "desc": "Tunes down to the previous station by frequency (Ctrl+Alt+B)."},
+"geoRadio_stop": {"cat": "gameplay", "order": 83, "ctx": "tlua", "onDown": "if geoRadio then geoRadio.stop() end", "title": "Geo Radio: play / pause", "desc": "Pauses the radio, or plays the last station again. Unbound by default."},
+"geoRadio_favorite": {"cat": "gameplay", "order": 84, "ctx": "tlua", "onDown": "if geoRadio then geoRadio.toggleFavorite() end", "title": "Geo Radio: add / remove favorite", "desc": "Adds the playing station to the favorites, or removes it (Ctrl+Alt+F)."},
+"geoRadio_saveSong": {"cat": "gameplay", "order": 85, "ctx": "tlua", "onDown": "if geoRadio then geoRadio.saveSong() end", "title": "Geo Radio: save the song", "desc": "Saves the playing song's artist and title to the list (Ctrl+Alt+S)."},
+"geoRadio_compact": {"cat": "gameplay", "order": 86, "ctx": "tlua", "onDown": "if geoRadio then geoRadio.toggleCompact() end", "title": "Geo Radio: compact window", "desc": "Switches the window between the full list and the compact player. Unbound by default."}
+}

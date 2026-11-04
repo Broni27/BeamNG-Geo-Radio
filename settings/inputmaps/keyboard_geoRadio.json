@@ -1,0 +1,10 @@
+{
+  "displayName": "Keyboard",
+  "bindings":[
+    {"control":"ctrl alt r", "action":"geoRadio_toggle"},
+    {"control":"ctrl alt n", "action":"geoRadio_next"},
+    {"control":"ctrl alt b", "action":"geoRadio_prev"},
+    {"control":"ctrl alt f", "action":"geoRadio_favorite"},
+    {"control":"ctrl alt s", "action":"geoRadio_saveSong"}
+  ]
+}
