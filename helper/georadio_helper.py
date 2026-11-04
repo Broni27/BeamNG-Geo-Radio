@@ -5,8 +5,9 @@ The game cannot reach the internet or decode audio streams, so this program does
     and where the camera is (inside the car or not, how far);
   * we reverse-geocode it (OpenStreetMap Nominatim) and look up stations (radio-browser.info):
     stations with coordinates within the radius, plus stations of the same city / region;
-  * the chosen station plays through the Windows audio output, with static mixed in as its
-    signal fades out of range, muffled outside the car in the realistic sound mode.
+  * the chosen station plays through the Windows default audio output (and follows it when
+    that device is changed in the system settings), with static mixed in as its signal fades
+    out of range, muffled outside the car in the realistic sound mode.
 
 Wire format: one JSON object per line (UTF-8), both directions.
 """
@@ -25,6 +26,7 @@ import time
 import traceback
 import urllib.parse
 import urllib.request
+import uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 if sys.stdout is None:          # pythonw (the autostart): no console, log to a file
@@ -35,7 +37,7 @@ import numpy as np
 import sounddevice as sd
 from scipy.signal import butter, lfilter
 
-VERSION = '0.3.1'
+VERSION = '0.3.2'
 HOST, PORT = '127.0.0.1', 47620
 UA = 'BeamNG-GeoRadio/' + VERSION
 CONFIG_PATH = os.path.join(HERE, 'config.json')
@@ -403,6 +405,68 @@ class Finder:
 
 # ---------------------------------------------------------------- audio
 
+_COM = threading.local()
+_OLE32 = ctypes.WinDLL('ole32')
+
+
+class _GUID(ctypes.Structure):
+    _fields_ = [('Data1', ctypes.c_ulong), ('Data2', ctypes.c_ushort),
+                ('Data3', ctypes.c_ushort), ('Data4', ctypes.c_ubyte * 8)]
+
+
+def _guid(text):
+    g = _GUID()
+    ctypes.memmove(ctypes.addressof(g), uuid.UUID(text).bytes_le, ctypes.sizeof(g))
+    return g
+
+
+_CLSID_ENUM = _guid('BCDE0395-E52F-467C-8E3D-C4579291692E')   # MMDeviceEnumerator
+_IID_ENUM = _guid('A95664D2-9614-4F35-A746-DE8DB63617E6')
+
+
+def _com_call(ptr, index, restype, argtypes):
+    table = ctypes.cast(ptr, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p)))[0]
+    return ctypes.WINFUNCTYPE(restype, ctypes.c_void_p, *argtypes)(table[index])
+
+
+def windows_default_output_id():
+    """Id of the playback device selected in Windows sound settings, or None."""
+    try:
+        if not getattr(_COM, 'ready', False):
+            hr = _OLE32.CoInitializeEx(None, 0)        # one COM apartment per thread
+            if hr < 0 and (hr & 0xFFFFFFFF) != 0x80010106:
+                return None
+            _COM.ready = True
+        enumerator = ctypes.c_void_p()
+        hr = _OLE32.CoCreateInstance(ctypes.byref(_CLSID_ENUM), None, 23,
+                                    ctypes.byref(_IID_ENUM), ctypes.byref(enumerator))
+        if hr < 0 or not enumerator:
+            return None
+        try:
+            device = ctypes.c_void_p()                 # eRender, eConsole: the default output
+            hr = _com_call(enumerator, 4, ctypes.HRESULT,
+                           [ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_void_p)])(
+                enumerator, 0, 0, ctypes.byref(device))
+            if hr < 0 or not device:
+                return None
+            try:
+                raw = ctypes.c_void_p()
+                hr = _com_call(device, 5, ctypes.HRESULT, [ctypes.POINTER(ctypes.c_void_p)])(
+                    device, ctypes.byref(raw))
+                if hr < 0 or not raw:
+                    return None
+                try:
+                    return ctypes.wstring_at(raw)
+                finally:
+                    _OLE32.CoTaskMemFree(raw)
+            finally:
+                _com_call(device, 2, ctypes.c_ulong, [])(device)
+        finally:
+            _com_call(enumerator, 2, ctypes.c_ulong, [])(enumerator)
+    except Exception:
+        return None
+
+
 class AudioEngine:
     """Plays a ring of decoded stereo float32 blocks: static by signal strength, then where the
     listener is (the cabin, outside: muffled and fading with distance, the game in the back)."""
@@ -432,23 +496,62 @@ class AudioEngine:
         self._b, self._a = butter(2, MUFFLE_HZ, fs=RATE)
         self._zi = np.zeros((2, 2))
         self.stream = None
+        self.output_id = None          # Windows id of the device self.stream plays on
+        self._output_check = 0.0
+        self._out_lock = threading.Lock()
         self.idle_since = time.time()
 
     def ensure_stream(self):
-        if self.stream is None:
+        with self._out_lock:
+            if self.stream is None:
+                self._open_stream()
+
+    def close_stream(self):
+        with self._out_lock:
+            self._close_stream()
+
+    def follow_output(self):
+        """Move an open stream onto the Windows default playback device when the user changes it."""
+        now = time.time()
+        if now < self._output_check:
+            return
+        self._output_check = now + 1.0
+        current = windows_default_output_id()
+        with self._out_lock:
+            if self.stream is None:
+                if self.active and current:
+                    self._open_stream()
+                return
+            if not current or current == self.output_id:
+                return
+            log('default audio device changed')
+            self._close_stream()
+            self._open_stream()
+
+    def _open_stream(self):
+        try:                               # PortAudio keeps the device list from startup
+            sd._terminate()
+            sd._initialize()
+            name = sd.query_devices(kind='output')['name']
             self.stream = sd.OutputStream(samplerate=RATE, channels=2, dtype='float32', blocksize=1024,
                                           callback=self._callback)
             self.stream.start()
-            log('audio out:', sd.query_devices(kind='output')['name'])
+        except Exception as e:
+            self.stream = None
+            log('cannot open the default audio device:', e)
+            return
+        self.output_id = windows_default_output_id() or self.output_id
+        log('audio out:', name)
 
-    def close_stream(self):
-        if self.stream is not None:
-            s, self.stream = self.stream, None
-            try:
-                s.stop()
-                s.close()
-            except Exception:
-                pass
+    def _close_stream(self):
+        if self.stream is None:
+            return
+        s, self.stream = self.stream, None
+        try:
+            s.stop()
+            s.close()
+        except Exception:
+            pass
 
     def clear(self):
         with self.lock:
@@ -1068,6 +1171,7 @@ class App:
         while True:
             time.sleep(0.25)
             now = time.time()
+            self.engine.follow_output()
             exe = foreground_exe()
             focused = exe.startswith('beamng') if exe else True
             if focused != self.engine.focused:
