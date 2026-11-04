@@ -97,6 +97,10 @@ The helper asks [Radio Browser](https://www.radio-browser.info/) for stations ar
 
 Station search and the place name are requested from Radio Browser and OpenStreetMap Nominatim while you drive. Nothing else is sent. Favorites, saved songs, volume and the last station stay in `helper\config.json` on your machine. That file is not part of this repository.
 
+### License
+
+[MIT](LICENSE).
+
 <a id="russian"></a>
 
 ## Русский
@@ -187,3 +191,7 @@ Station search and the place name are requested from Radio Browser and OpenStree
 ### Приватность
 
 Пока вы едете, запрос станций и названия места уходит в Radio Browser и Nominatim (OpenStreetMap). Больше ничего не отправляется. Избранное, сохранённые песни, громкость и последняя станция лежат в `helper\config.json` на вашем компьютере. Этого файла в репозитории нет.
+
+### Лицензия
+
+[MIT](LICENSE).
